@@ -78,6 +78,17 @@ export class WrapLexicon {
     return this.isWord(left + right) && !this.pairs.has(left + " " + right)
   }
 
+  /** 앞 조각이 줄 안 어절의 머리이고, 그 어절의 나머지가 뒤 조각의 머리인가.
+   *  "의료"+"기관이" 는 어절 "의료기관" 으로 이어지고, "행정"+"시스템" 은 "새올행정시스템" 의 중간이라 아니다. */
+  continuesWord(left: string, right: string): boolean {
+    if (!left || !right) return false
+    for (const w of this.words.keys()) {
+      if (w.length <= left.length || !w.startsWith(left)) continue
+      if (right.startsWith(w.slice(left.length))) return true
+    }
+    return false
+  }
+
   /** 두 글자+두 글자 증거만 — 한 글자 쌍으로 물러서지 않는다 (표 칸 조각처럼 줄 꺾임이 아닌 자리에 쓸 때) */
   evidence2(left: string, right: string): "" | " " | null {
     const n = left.length
@@ -185,6 +196,13 @@ export function startsNewItem(prevText: string, nextText: string): boolean {
   return ITEM_HEAD.test(t) && !(/^다\./.test(t) && /[가-힣]$/.test(prevText.replace(MARKUP, "").trimEnd()))
 }
 
+/** 공백으로 나뉜 어절 수. 호출 전에 표시 태그는 걷혀 있다. */
+function lineEojeolCount(line: string): number {
+  let n = 0
+  for (const tok of line.split(/\s+/)) if (tok) n++
+  return n
+}
+
 /**
  * 꺾인 자리의 이음 — "" (어절 중간, 붙임) | " " (어절 경계). prevText 는 꺾인 줄, nextText 는 이어지는 줄.
  * 판정 순서와 근거는 머리 주석. 어휘 사전이 없으면(단독 호출) 형태 규칙만 쓴다.
@@ -212,7 +230,13 @@ export function wrapJoiner(prevText: string, nextText: string, lex?: WrapLexicon
   // 영어 낱말은 한컴 영문 줄나눔 기본(단어)이라 줄에서 잘리지 않는다 — 한 글자 증거(data 의 "a|t")가 속이지 않게 먼저.
   // 숫자끼리도 한 글자 증거는 숫자 안 이웃(2026 의 "0|2")이라 믿지 않는다(11:00⏎2026. 9. 2)
   if ((/[A-Za-z]/.test(a) && /[A-Za-z]/.test(b)) || (/\d/.test(a) && /\d/.test(b))) return " "
-  const ev = lex?.evidence(left, right)
+  let ev = lex?.evidence(left, right) ?? null
+  // 어절이 둘 이상인 줄의 끝은 어절 경계다. 글자 한두 개가 다른 낱말 안에서만 붙어 나온 증거
+  // ("여전히"의 여-전, "통합행정시스템"의 정-시)로 그 경계를 붙이지 않는다.
+  // 앞 조각이 줄 안 어절의 머리인 경우만 그 증거를 남긴다 ("부속 의료"+"기관이" → 어절 "의료기관").
+  // 줄이 한 어절이면 그 어절이 줄 폭보다 길어 잘린 후보로 보고 종전 증거를 쓴다.
+  if (ev === "" && lineEojeolCount(prev) >= 2 && /[가-힣]/.test(a) && /[가-힣]/.test(b)
+    && !lex?.continuesWord(left, right.replace(/[.,)」』’”;:]+$/, ""))) ev = null
   if (ev != null) return ev
   // 이어 붙인 꼴이 문서 줄 안에 한 어절로 나왔고 두 조각을 띄어 쓴 이웃 어절로는 나온 적 없으면 붙인다 — 글자 쌍 증거가 갈리는(한 문서에
   // "개인정보 처리"·"개인정보처리자" 가 섞인) 명사+명사 꺾임을 어절 통째로 가른다("개인정보⏎처리자가" → 문서 안 "개인정보처리자가").

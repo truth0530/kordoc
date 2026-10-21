@@ -61,6 +61,21 @@ describe("wrapJoiner — 꺾인 자리 붙임/띄움 (hwpx↔pdf 실측 사례)"
     assert.equal(wrapJoiner("주요 기후", "위기 대응", lexOf("최근 기후위기 극복")), "")
   })
 
+  it("어절이 둘 이상인 줄은 다른 낱말 안의 글자 쌍 증거로 붙이지 않는다", () => {
+    const lex = new WrapLexicon()
+    lex.addLine("상황은 여전히 같다")
+    lex.addLine("통합행정시스템 안내를 본다")
+    // 한 어절 줄은 줄 폭을 넘긴 조각 후보라 종전 증거를 쓴다
+    assert.equal(wrapJoiner("추진하여", "전국으로", lex), "")
+    assert.equal(wrapJoiner("행정", "시스템 안내", lex), "")
+    // 같은 경계라도 앞 줄에 어절이 더 있으면 어절 경계다
+    assert.equal(wrapJoiner("사업을 추진하여", "전국으로", lex), " ")
+    assert.equal(wrapJoiner("분산된 행정", "시스템 안내", lex), " ")
+    // 앞 조각이 줄 안 어절의 머리면 어절이 여럿이어도 붙인다
+    lex.addLine("여기 의료기관 있다")
+    assert.equal(wrapJoiner("개설된 부속 의료", "기관이 운용한다", lex), "")
+  })
+
   it("한 음절 조각: 줄 안에서 홀로 선 적 없으면 붙이고 낱말(등)이면 띄운다", () => {
     // "등" 은 줄 안에서 홀로 선 어절로 나오지만 "등|주" 이웃 증거는 없다 — 조각 검사가 가른다
     const lex = lexOf("가 국제우편 등 기타 경로", "하나 둘")
