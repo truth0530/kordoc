@@ -382,13 +382,23 @@ function markEvenRun(items: TextItem[], visible: string[], result: boolean[], st
 
 export { detectEvenSpacedItems }
 
+/** 공백으로 나뉜 어절 수. 밑줄·취소선 표지는 글자가 아니다. */
+function eojeolCount(line: string): number {
+  const t = line.replace(/<\/?u>|~~/g, "").trim()
+  if (!t) return 0
+  let n = 0
+  for (const tok of t.split(/\s+/)) if (tok) n++
+  return n
+}
+
 /**
  * 셀 내 텍스트 아이템을 읽기 순서로 정렬 후 합치기 — 줄바꿈 병합 전용.
  * (cellTextToString 내부에서 사용)
- * wrap 이 있으면 한글 줄 이음은 꺾임 판정(wraps[i] = textLines[i] 가 다음 줄로 꺾였나)과 어절 판정(wrapJoiner)으로:
- * 어절 중간 꺾임만 붙이고 어절 경계 꺾임·문단 경계는 줄바꿈으로 둔다(칸은 가운데 정렬 칸의 넓은 줄이 찬 줄처럼 보여 문단
- * 경계를 공백으로 잇는 건 삼간다). 종전 조각 규칙 — 8자 이하 한글 조각 붙임·쉼표/여는 괄호 뒤 15자 붙임 — 은 hwpx↔pdf 417쌍
- * 칸 줄 이음 실측에서 정밀도 10%(맞음 101·틀림 874)·2%(맞음 5·틀림 316)라 칸 상자가 있는 호출에서는 쓰지 않는다
+ * wrap 이 있으면 한글 줄 이음은 꺾임 판정(wraps[i] = textLines[i] 가 다음 줄로 꺾였나)과 어절 판정(wrapJoiner)으로 가른다.
+ * 어절 중간 꺾임(joiner "")은 붙인다. 앞 줄 어절이 둘 이상이고 이음이 공백이며 양쪽에 한글이 있으면 어절 경계에서 꺾인 줄로
+ * 보고 공백으로 잇는다. 어절이 하나인 줄은 줄바꿈으로 둔다 — 가운데 정렬 칸의 가장 넓은 줄이 찬 줄처럼 보여 문단 경계가
+ * 꺾임으로 잡히는 자리를 공백으로 잇지 않으려고. 종전 조각 규칙 — 8자 이하 한글 조각 붙임·쉼표/여는 괄호 뒤 15자 붙임 — 은
+ * hwpx↔pdf 417쌍 칸 줄 이음 실측에서 정밀도 10%(맞음 101·틀림 874)·2%(맞음 5·틀림 316)라 칸 상자가 있는 호출에서는 쓰지 않는다
  */
 function mergeCellTextLines(textLines: string[], wrap?: { wraps: boolean[]; lex?: WrapLexicon }): string {
   // 셀 내 줄바꿈 병합 — 잘린 단어/숫자 조각 복구
@@ -397,9 +407,15 @@ function mergeCellTextLines(textLines: string[], wrap?: { wraps: boolean[]; lex?
   for (let i = 1; i < textLines.length; i++) {
     const prev = merged[merged.length - 1]
     const curr = textLines[i]
-    if (wrap
-      ? wrap.wraps[i - 1] && !startsNewItem(prev, curr) && wrapJoiner(prev, curr, wrap.lex) === ""
-      : /[가-힣]$/.test(prev) && /^[가-힣]+$/.test(curr) && curr.length <= 8 && !curr.includes(" ")) {
+    const atWrap = !!wrap && wrap.wraps[i - 1] && !startsNewItem(prev, curr)
+    const joiner = atWrap ? wrapJoiner(prev, curr, wrap!.lex) : undefined
+    if (atWrap && joiner === "") {
+      merged[merged.length - 1] = prev + curr
+    }
+    else if (atWrap && joiner === " " && eojeolCount(prev) >= 2 && /[가-힣]/.test(prev) && /[가-힣]/.test(curr)) {
+      merged[merged.length - 1] = prev.replace(/\s+$/, "") + " " + curr.replace(/^\s+/, "")
+    }
+    else if (!wrap && /[가-힣]$/.test(prev) && /^[가-힣]+$/.test(curr) && curr.length <= 8 && !curr.includes(" ")) {
       merged[merged.length - 1] = prev + curr
     }
     else if (curr.trim().length <= 3 && /^[)\]%}]/.test(curr.trim())) {

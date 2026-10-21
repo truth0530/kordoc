@@ -205,7 +205,7 @@ function ti(text: string, x: number, y: number, w: number, fontSize = 10): TextI
 describe("cellTextToString — 칸 상자가 있으면 꺾임을 기하·어휘로", () => {
   // 칸 x 58~301.6, 안쪽 여백 5.1 → 글 오른끝 296.5 (pair05 해외통계채용 가점 표 실측 기하)
   const box = { x1: 58, x2: 301.6 }
-  it("오른끝까지 찬 줄의 어절 중간 꺾임은 붙이고, 어절 경계 꺾임은 줄바꿈으로 둔다", () => {
+  it("오른끝까지 찬 줄의 어절 중간 꺾임은 붙이고, 어절이 둘 이상인 경계 꺾임은 공백으로 잇는다", () => {
     const lex = lexOf("가 재일학도의용군인 나")
     const items = [
       ti("-", 63.1, 608, 5.6), ti("보국수훈자,", 224.8, 608, 55.7), ti("재", 285.7, 608, 10.8),
@@ -215,7 +215,32 @@ describe("cellTextToString — 칸 상자가 있으면 꺾임을 기하·어휘�
     items[1].hasSpaceBefore = true
     items[2].hasSpaceBefore = true
     items[4].hasSpaceBefore = true
-    assert.equal(cellTextToString(items, { box, lex }), "- 보국수훈자, 재일학도의용군인, 특별공로자의\n배우자")
+    assert.equal(cellTextToString(items, { box, lex }), "- 보국수훈자, 재일학도의용군인, 특별공로자의 배우자")
+  })
+
+  it("어절이 둘 이상인 찬 줄의 어절 경계는 공백으로 잇고, 한 어절 줄·안 찬 줄·새 항목·한 음절 조각은 종전대로 둔다", () => {
+    const full = (text: string, x: number, y: number, w: number) => ti(text, x, y, w)
+    const spaced = [
+      full("현장", 70, 200, 40), full("점검을", 120, 200, 176), full("마쳤다", 70, 184, 40),
+    ]
+    spaced[1].hasSpaceBefore = true
+    assert.equal(cellTextToString(spaced, { box }), "현장 점검을 마쳤다")
+    // 어절이 하나면 찬 줄이어도 문단 경계일 수 있어 줄바꿈으로 둔다
+    assert.equal(cellTextToString([full("기준값을", 70, 200, 226), full("확인한다", 70, 184, 40)], { box }), "기준값을\n확인한다")
+    // 칸 안에 다음 어절이 들어갈 자리면 원문 줄바꿈
+    const short = [full("현장", 70, 200, 20), full("점검", 96, 200, 20), full("기록", 70, 184, 20)]
+    short[1].hasSpaceBefore = true
+    assert.equal(cellTextToString(short, { box }), "현장 점검\n기록")
+    // 새 항목
+    const item = [full("현장", 70, 200, 40), full("점검을", 120, 200, 176), full("○ 다음 항목", 70, 184, 70)]
+    item[1].hasSpaceBefore = true
+    assert.equal(cellTextToString(item, { box }), "현장 점검을\n○ 다음 항목")
+    // 끝 한 음절은 어절 중간 조각 — 앞 줄 어절이 둘이어도 붙인다
+    const lex = new WrapLexicon()
+    lex.addLine("다른 문장은 여기 있다")
+    const frag = [full("조사", 70, 200, 30), full("재", 250, 200, 46), full("일학도", 70, 184, 40)]
+    frag[1].hasSpaceBefore = true
+    assert.equal(cellTextToString(frag, { box, lex }), "조사 재일학도")
   })
 
   it("칸 안쪽에 다음 글자가 들어갈 자리가 있던 줄(문단 끝)은 잇지 않는다", () => {
